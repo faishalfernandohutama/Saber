@@ -1,0 +1,111 @@
+{
+ "status": "success",
+ "updated": "2026-10-22",
+ "documents": {
+  "SABER-ATURAN": {
+   "version": "2.0",
+   "sections": [
+    {
+     "section_no": 0,
+     "title": "SABER – Aturan Perhitungan & Kebijakan (Account Takeover MVP, mode HYBRID)",
+     "content": "- Dokumen: SABER-ATURAN\n- Versi: 2.0 (22 Okt 2026)\n- Pemilik: Kelompok 1 – SABER (Security Agent for Banking Emergency Response)\n- Dipakai oleh: Agent Klasifikasi, Investigasi, Keputusan, Respons, Monitoring, Verifikasi\n- Aturan utama: dokumen ini adalah satu-satunya sumber kebenaran untuk skor risiko, tingkat keparahan, keyakinan, jenis insiden, SLA, dan kebijakan tindakan SABER. Jangan memakai angka di luar dokumen ini.\n- Pengetahuan tentang serangan pengambilalihan akun dan langkah penanganannya ada di dokumen terpisah SABER-PENGETAHUAN-ATO."
+    },
+    {
+     "section_no": 1,
+     "title": "Bagian 1. Matriks Tingkat Keparahan SABER",
+     "content": "| Skor risiko | Tingkat (severity) | Prioritas | Penanganan |\n|---|---|---|---|\n| 0–39 | LOW | P4 | Tiket dan pemantauan otomatis |\n| 40–69 | MEDIUM | P3 | Tiket otomatis; ditinjau analis bila perlu |\n| 70–84 | HIGH | P2 | Prioritas tinggi; tindakan sensitif wajib persetujuan |\n| 85–100 | CRITICAL | P1 | Tim SOC menangani segera; tindakan berdampak tinggi wajib persetujuan |\n\nAturan dalam kalimat:\n- Skor risiko di bawah 40 adalah LOW dengan prioritas P4.\n- Skor risiko 40 sampai 69 adalah MEDIUM dengan prioritas P3.\n- Skor risiko 70 sampai 84 adalah HIGH dengan prioritas P2.\n- Skor risiko 85 atau lebih adalah CRITICAL dengan prioritas P1."
+    },
+    {
+     "section_no": 2,
+     "title": "Bagian 2. Aturan Skor Risiko SABER",
+     "content": "Skor dimulai dari 0, lalu ditambah poin untuk setiap indikator yang terpenuhi. Nilai maksimum 100.\n\n| Indikator | Poin | Kapan terpenuhi |\n|---|---|---|\n| MALICIOUS_IP | +30 | Reputasi IP = MALICIOUS |\n| UNUSUAL_LOCATION | +15 | Lokasi login berbeda dari lokasi normal user |\n| NEW_DEVICE | +15 | Perangkat login tidak ada di daftar perangkat biasa user |\n| MULTIPLE_FAILED_LOGIN | +10 | Gagal login 3 kali atau lebih |\n| HIGH_VALUE_TRANSACTION | +15 | Nominal transaksi melebihi batas transaksi wajar user |\n| REPEAT_VICTIM | +7 | User pernah punya insiden ACCOUNT_TAKEOVER atau severity CRITICAL |\n| OUTSIDE_LOGIN_WINDOW | +5 | Jam login di luar jam login biasa user |\n\nDua tahap perhitungan:\n- Skor awal (initial_risk, Agent Klasifikasi): dihitung dari indikator hasil penilaian log (Bagian 5), belum diverifikasi. MALICIOUS_IP dan HIGH_VALUE_TRANSACTION belum dihitung di tahap ini.\n- Skor akhir (risk_score, Agent Keputusan): dihitung HANYA dari indikator berstatus VERIFIED oleh Agent Investigasi. Skor akhir inilah yang menentukan tingkat keparahan, prioritas, dan tindakan.\n- Indikator berstatus NOT_AVAILABLE (datanya belum ada) tidak diberi poin."
+    },
+    {
+     "section_no": 3,
+     "title": "Bagian 3. Aturan Tingkat Keyakinan SABER",
+     "content": "- Keyakinan (confidence) = 0,70 + (0,04 × jumlah indikator VERIFIED), maksimum 0,99.\n- Kurangi 0,10 untuk setiap indikator yang terdeteksi Agent Klasifikasi tetapi hasil pemeriksaan Agent Investigasi NOT_VERIFIED.\n- Indikator tambahan yang baru diperiksa Agent Investigasi (bukan temuan Agent Klasifikasi) dan berstatus NOT_VERIFIED tidak mengurangi keyakinan.\n- Indikator NOT_AVAILABLE tidak dihitung dan tidak mengurangi keyakinan."
+    },
+    {
+     "section_no": 4,
+     "title": "Bagian 4. Aturan Jenis Insiden SABER",
+     "content": "- ACCOUNT_TAKEOVER jika login berhasil (successful_login = true) DAN ada minimal 3 indikator dari daftar: UNUSUAL_LOCATION, NEW_DEVICE, MULTIPLE_FAILED_LOGIN, MALICIOUS_IP, HIGH_VALUE_TRANSACTION.\n- Selain itu: SUSPICIOUS_LOGIN.\n- OUTSIDE_LOGIN_WINDOW dan REPEAT_VICTIM tidak ikut dihitung untuk syarat minimal 3 indikator."
+    },
+    {
+     "section_no": 5,
+     "title": "Bagian 5. Aturan Deteksi dari Log Login",
+     "content": "Data masukan adalah log login mentah dari SRM (log_id, user_id, timestamp, ip_address, device, location, result, failure_reason) dan profil akun dari form Akun (lokasi normal, perangkat biasa, jam login awal dan akhir, status akun). SABER sendiri yang menilai log; tidak ada penandaan dari sistem lain yang dipakai.\n\nLangkah menilai:\n1. Kelompokkan log per user_id dan urutkan berdasarkan timestamp.\n2. Peristiwa yang dinilai adalah setiap login dengan result = SUCCESS.\n3. Untuk setiap login SUCCESS, tentukan indikator:\n\n| Indikator | Cara menentukan dari log dan profil |\n|---|---|\n| MULTIPLE_FAILED_LOGIN | Jumlah log FAILED milik user yang sama dalam 30 menit sebelum login SUCCESS tersebut >= 3. failed_attempts = jumlah itu. |\n| NEW_DEVICE | Perangkat login tidak ada di daftar perangkat biasa di profil DAN tidak pernah dipakai pada login SUCCESS sebelumnya oleh user yang sama. |\n| UNUSUAL_LOCATION | Kota pada lokasi login berbeda dengan lokasi normal di profil. |\n| OUTSIDE_LOGIN_WINDOW | Jam login (WIB, +07:00) berada di luar jam login awal–akhir di profil. |\n\n4. Login SUCCESS dianggap mencurigakan dan perlu dijadikan peringatan bila MULTIPLE_FAILED_LOGIN terpenuhi DAN minimal salah satu dari NEW_DEVICE atau UNUSUAL_LOCATION terpenuhi.\n5. Jika ada lebih dari satu login mencurigakan, proses yang timestamp-nya paling baru.\n6. Jika profil user tidak ada, indikator yang butuh profil (NEW_DEVICE, UNUSUAL_LOCATION, OUTSIDE_LOGIN_WINDOW) berstatus NOT_AVAILABLE.\n7. Login FAILED berulang tanpa login SUCCESS sesudahnya bukan pengambilalihan akun; catat sebagai percobaan gagal dan tidak dijadikan peringatan.\n\nAturan pembentukan peringatan:\n- alert_id = log_id dari login SUCCESS yang dinilai\n- event_type = SUSPICIOUS_LOGIN\n- successful_login = true\n- evidence_log_ids = log_id login SUCCESS tersebut ditambah log_id semua login FAILED yang dihitung\n- incident_id sementara = INC-YYYYMMDD-XXXX (tanggal dari timestamp login, XXXX = 4 digit terakhir angka di log_id)"
+    },
+    {
+     "section_no": 6,
+     "title": "Bagian 6. Matriks Eskalasi dan SLA SABER",
+     "content": "| Prioritas | Penanggung jawab awal | Batas konfirmasi | Batas penyelesaian | Eskalasi 1 (batas konfirmasi terlewati) | Eskalasi 2 |\n|---|---|---|---|---|---|\n| P1 (CRITICAL) | SOC L2 | 15 menit | 4 jam | SOC L3 | Security Manager |\n| P2 (HIGH) | SOC L2 | 30 menit | 8 jam | SOC L3 | Security Manager |\n| P3 (MEDIUM) | SOC L1 | 4 jam | 24 jam | SOC L2 | SOC L3 |\n| P4 (LOW) | SOC L1 | 24 jam | 72 jam | SOC L2 | - |\n\nStatus SLA:\n- Pengingat dikirim saat 50% waktu konfirmasi sudah lewat tanpa konfirmasi.\n- WARNING saat sisa waktu 30% atau kurang.\n- BREACH saat waktu habis; insiden dieskalasi ke tingkat berikutnya.\n- Selain itu ON_TRACK."
+    },
+    {
+     "section_no": 7,
+     "title": "Bagian 7. Kebijakan Tindakan SABER",
+     "content": "| Tindakan | Mode | Keterangan |\n|---|---|---|\n| CREATE_INCIDENT | AUTO | Buat insiden |\n| ASSIGN_SOC_L2 / ASSIGN_SOC_L1 | AUTO | Tetapkan penanggung jawab |\n| ATTACH_EVIDENCE | AUTO | Lampirkan bukti |\n| SEND_NOTIFICATION | AUTO | Kirim notifikasi ke SOC |\n| BLOCK_IP | AUTO | Blokir IP berreputasi MALICIOUS |\n| FORCE_LOGOUT_SESSION | AUTO | Akhiri sesi aktif yang mencurigakan |\n| FREEZE_ACCOUNT | HUMAN_APPROVAL | Bekukan akun, hanya setelah disetujui |\n| BLOCK_TRANSACTION | HUMAN_APPROVAL | Tahan/batalkan transaksi, hanya setelah disetujui |\n| DISABLE_ACCESS | HUMAN_APPROVAL | Nonaktifkan akses user, hanya setelah disetujui |\n| ESCALATE | AUTO | Eskalasi saat batas SLA terlewati |\n\nAturan keras:\n- FREEZE_ACCOUNT, BLOCK_TRANSACTION, dan DISABLE_ACCESS TIDAK PERNAH dijalankan tanpa persetujuan manusia berstatus APPROVED.\n- Pemberi persetujuan: SOC L2 Lead atau Security Manager.\n- Jika persetujuan REJECTED, tindakan tidak dijalankan dan alasannya dicatat."
+    },
+    {
+     "section_no": 8,
+     "title": "Bagian 8. Siklus Hidup Insiden SABER",
+     "content": "OPEN → ASSIGNED → INVESTIGATING → (PENDING_APPROVAL) → RESOLVED → CLOSED, atau REOPENED bila verifikasi gagal."
+    },
+    {
+     "section_no": 9,
+     "title": "Bagian 9. Sumber Data SABER (mode HYBRID)",
+     "content": "| Data | Sumber | Status |\n|---|---|---|\n| Log login mentah | SRM form Log Login, lewat PF SABER - SUMMARY | REAL |\n| Profil user (lokasi normal, perangkat biasa, jam login, status akun) | SRM form Akun, lewat PF SABER - SUMMARY | REAL |\n| Reputasi IP | Belum ada sumber | NOT_AVAILABLE |\n| Riwayat insiden | Belum ada sumber | NOT_AVAILABLE |\n| Transaksi | Belum ada sumber | NOT_AVAILABLE |\n\n- Mode HYBRID berarti: data yang tersedia diambil nyata dari SRM, data yang belum punya sumber ditulis NOT_AVAILABLE, dan tindakan belum terhubung ke sistem.\n- Hasil SUMMARY: {\"status\":\"success\",\"log_count\":N,\"logs\":[{\"log_id\",\"user_id\",\"timestamp\",\"ip_address\",\"device\",\"location\",\"result\",\"failure_reason\"}],\"profiles\":{\"<user_id>\":{...}}}, biasanya berada di value.output.output. Penilaian log dilakukan sesuai Bagian 5. User yang tidak ada di profiles berarti profilnya NOT_AVAILABLE.\n- Indikator yang datanya NOT_AVAILABLE (MALICIOUS_IP, REPEAT_VICTIM, HIGH_VALUE_TRANSACTION selama sumbernya belum ada) berstatus NOT_AVAILABLE, tidak diberi poin, dan tidak mengurangi keyakinan.\n- Tindakan (buat insiden, blokir IP, bekukan akun, dll.) belum terhubung ke sistem. Tulis sebagai rencana tindakan dengan status NOT_EXECUTED dan jangan mengaku sudah dijalankan.\n- Jangan pernah mengisi data yang tidak berasal dari SRM atau dari dokumen ini. Jika data tidak tersedia, tulis NOT_AVAILABLE."
+    }
+   ]
+  },
+  "SABER-PENGETAHUAN-ATO": {
+   "version": "1.0",
+   "sections": [
+    {
+     "section_no": 0,
+     "title": "SABER – Pengetahuan Pengambilalihan Akun (Account Takeover)",
+     "content": "- Dokumen: SABER-PENGETAHUAN-ATO\n- Versi: 1.0 (22 Okt 2026)\n- Pemilik: Kelompok 1 – SABER\n- Isi: pengetahuan umum tentang serangan pengambilalihan akun pada layanan perbankan digital, tanda-tandanya, cara menginvestigasi, dan cara menanganinya.\n- Batasan: dokumen ini dipakai untuk memahami dan menjelaskan kasus. Angka skor, tingkat keparahan, SLA, dan kebijakan tindakan TIDAK diambil dari sini, tetapi dari dokumen SABER-ATURAN."
+    },
+    {
+     "section_no": 1,
+     "title": "Bagian 1. Apa itu pengambilalihan akun (ATO)",
+     "content": "Pengambilalihan akun (Account Takeover/ATO) adalah kondisi ketika pihak yang tidak berhak berhasil masuk dan menguasai akun milik nasabah, biasanya memakai kredensial yang sah (user ID dan kata sandi) yang dicuri atau ditebak. Karena login memakai kredensial yang benar, sistem melihatnya sebagai login yang berhasil. Itulah sebabnya ATO dideteksi dari perilaku yang menyimpang, bukan dari kata sandi yang salah.\n\nTujuan pelaku pada layanan perbankan umumnya:\n- memindahkan dana ke rekening penampung atau penerima baru;\n- mengubah data akun (nomor HP, email, perangkat terdaftar) supaya nasabah asli terkunci;\n- mengambil data pribadi untuk penipuan lanjutan;\n- memakai akun sebagai rekening perantara.\n\nDampaknya: kerugian finansial nasabah, kerugian reputasi bank, dan kewajiban penanganan pengaduan nasabah."
+    },
+    {
+     "section_no": 2,
+     "title": "Bagian 2. Teknik serangan yang umum",
+     "content": "| Teknik | Cara kerja | Jejak yang biasa terlihat | Rujukan MITRE ATT&CK |\n|---|---|---|---|\n| Brute force / menebak kata sandi | Mencoba banyak kata sandi pada satu akun | Banyak login gagal berturut-turut pada satu user, lalu berhasil | T1110.001 |\n| Password spraying | Mencoba sedikit kata sandi umum pada banyak akun | Login gagal tersebar di banyak user dari IP yang sama | T1110.003 |\n| Credential stuffing | Memakai pasangan user/kata sandi hasil kebocoran situs lain | Login dari IP asing atau jaringan hosting/proxy, tingkat gagal tinggi di banyak akun | T1110.004 |\n| Phishing | Nasabah tertipu memasukkan kredensial di situs/aplikasi palsu | Login berhasil dari perangkat dan lokasi baru tanpa banyak percobaan gagal | T1566 |\n| Pencurian sesi | Mencuri cookie/token sesi sehingga tidak perlu login | Sesi aktif dari IP atau perangkat yang berbeda dengan saat login | T1539 |\n| Penyalahgunaan akun sah | Pelaku memakai akun yang kredensialnya sudah dikuasai | Aktivitas di luar kebiasaan user setelah login berhasil | T1078 |\n| Mencegat atau membanjiri MFA | Mencegat kode OTP atau mengirim permintaan MFA berulang sampai disetujui | Permintaan OTP/MFA berulang, persetujuan MFA di jam tidak wajar | T1111, T1621 |\n| Penukaran kartu SIM (SIM swap) | Mengambil alih nomor HP nasabah untuk menerima OTP | Nomor HP nasabah tiba-tiba tidak aktif, OTP diminta dari perangkat baru | T1451 (Mobile) |\n| Malware pencuri data (infostealer) | Malware di perangkat nasabah mengirim kredensial ke pelaku | Login dari lokasi lain tak lama setelah nasabah memakai perangkat yang terinfeksi | – |\n| Rekayasa sosial | Pelaku mengaku petugas bank dan meminta OTP atau kata sandi | Nasabah melapor dihubungi \"petugas bank\" sebelum kejadian | – |"
+    },
+    {
+     "section_no": 3,
+     "title": "Bagian 3. Arti setiap indikator SABER",
+     "content": "- MULTIPLE_FAILED_LOGIN: pola gagal berulang lalu berhasil adalah tanda khas brute force atau credential stuffing. Makin banyak percobaan dalam waktu singkat, makin kecil kemungkinan itu nasabah yang lupa kata sandi.\n- NEW_DEVICE: pelaku jarang memakai perangkat yang sama dengan nasabah. Perangkat yang tidak pernah dipakai sebelumnya menandakan kemungkinan orang lain.\n- UNUSUAL_LOCATION: login dari kota atau negara yang berbeda dari kebiasaan, terutama luar negeri, sering berarti pelaku berada di tempat lain atau memakai proxy/VPN.\n- OUTSIDE_LOGIN_WINDOW: pelaku sering beraksi saat nasabah tidur (dini hari) agar notifikasi tidak segera disadari.\n- MALICIOUS_IP: IP yang tercatat dipakai untuk serangan sebelumnya memperkuat dugaan bahwa login berasal dari pelaku.\n- HIGH_VALUE_TRANSACTION: transfer besar ke penerima baru segera setelah login mencurigakan adalah tahap pencairan dana oleh pelaku.\n- REPEAT_VICTIM: nasabah yang pernah menjadi korban berisiko diserang lagi, misalnya karena kredensial atau perangkatnya masih bocor.\n\nKombinasi indikator lebih bermakna daripada satu indikator saja. Login berhasil setelah banyak gagal, ditambah perangkat baru dan lokasi berbeda, adalah pola ATO yang kuat."
+    },
+    {
+     "section_no": 4,
+     "title": "Bagian 4. Kemungkinan positif palsu",
+     "content": "Tidak semua login yang ditandai adalah serangan. Kemungkinan penjelasan wajar:\n- nasabah sedang bepergian, sehingga lokasi berbeda;\n- nasabah mengganti atau menambah HP baru;\n- nasabah lupa kata sandi lalu mencoba beberapa kali;\n- nasabah memakai VPN atau jaringan kantor yang IP-nya berpindah negara;\n- perubahan jaringan operator seluler yang membuat lokasi IP tidak akurat.\n\nCara membedakan: periksa apakah ada beberapa tanda sekaligus, apakah ada tindakan berisiko setelah login (ubah data akun, transfer ke penerima baru), dan konfirmasi langsung ke nasabah lewat kanal resmi yang terdaftar. Jangan menutup kasus sebagai positif palsu tanpa bukti atau konfirmasi."
+    },
+    {
+     "section_no": 5,
+     "title": "Bagian 5. Panduan investigasi",
+     "content": "Pertanyaan yang perlu dijawab analis:\n1. Apakah login berasal dari perangkat, lokasi, dan jam yang biasa dipakai nasabah?\n2. Berapa kali gagal sebelum berhasil, dan dalam rentang waktu berapa lama?\n3. Apakah IP pernah tercatat dipakai untuk serangan?\n4. Apakah ada akun lain yang mendapat percobaan login dari IP yang sama (tanda password spraying atau credential stuffing)?\n5. Apa yang dilakukan setelah login: lihat saldo, ubah data akun, tambah penerima, transfer?\n6. Apakah nasabah pernah menjadi korban sebelumnya?\n7. Apakah sesi pelaku masih aktif?\n\nBukti yang perlu dikumpulkan: log login (waktu, IP, perangkat, lokasi, hasil), profil normal nasabah, riwayat insiden, aktivitas sesi, dan transaksi setelah login. Setiap kesimpulan harus menyebut bukti mana yang dipakai. Data yang tidak tersedia ditulis apa adanya, tidak ditebak."
+    },
+    {
+     "section_no": 6,
+     "title": "Bagian 6. Playbook penanganan ATO",
+     "content": "1. Validasi peringatan dan buat konteks insiden.\n2. Verifikasi profil normal nasabah (lokasi, perangkat, jam login, pola transaksi).\n3. Periksa reputasi IP dan riwayat insiden nasabah.\n4. Hitung skor, tingkat keparahan, dan keyakinan memakai SABER-ATURAN.\n5. Penahanan cepat (tindakan AUTO sesuai SABER-ATURAN): buat insiden, tetapkan penanggung jawab, lampirkan bukti, blokir IP, akhiri sesi aktif, beri tahu SOC.\n6. Tindakan berdampak tinggi dengan persetujuan manusia: bekukan akun, tahan transaksi, nonaktifkan akses.\n7. Pantau SLA dan eskalasi sesuai SABER-ATURAN.\n8. Pemulihan: hubungi nasabah lewat kanal resmi yang terdaftar, minta penggantian kata sandi, daftarkan ulang perangkat, aktifkan atau perkuat MFA, periksa perubahan data akun yang dibuat pelaku dan kembalikan ke data asli.\n9. Verifikasi: IP terblokir, sesi berakhir, akun beku bila disetujui, transaksi tertahan, tidak ada login baru dari IP atau perangkat yang sama.\n10. Penutupan: tulis akar masalah, tindakan yang diambil, dan hasil verifikasi. Jika verifikasi gagal, buka kembali insiden dan ulangi dari langkah 5."
+    },
+    {
+     "section_no": 7,
+     "title": "Bagian 7. Komunikasi dengan nasabah",
+     "content": "- Hubungi nasabah hanya lewat kontak resmi yang terdaftar sebelum kejadian, bukan kontak yang baru diubah.\n- Jangan pernah meminta kata sandi, PIN, atau OTP kepada nasabah.\n- Jelaskan bahwa ada aktivitas tidak biasa, langkah pengamanan yang sudah diambil, dan apa yang perlu dilakukan nasabah (ganti kata sandi, periksa perangkat dari malware, waspadai telepon yang mengaku petugas bank).\n- Catat waktu dan hasil kontak sebagai bukti di insiden."
+    },
+    {
+     "section_no": 8,
+     "title": "Bagian 8. Pencegahan",
+     "content": "- Batasi jumlah percobaan login dan kunci sementara akun setelah gagal berulang.\n- Wajibkan MFA, terutama untuk login dari perangkat baru dan transaksi besar.\n- Ikat akun ke perangkat terdaftar (device binding).\n- Kirim notifikasi ke nasabah untuk login dari perangkat atau lokasi baru.\n- Pantau IP yang mencoba banyak akun sekaligus.\n- Edukasi nasabah tentang phishing dan penipuan yang mengaku petugas bank."
+    }
+   ]
+  }
+ }
+}
